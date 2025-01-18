@@ -104,12 +104,12 @@ def train(device, epoch=10, batch_size=32):
     encoder = Encoder(embed_size)
     decoder = Decoder(embed_size, 512, len(train.vocab))
     model = ImageCaption(encoder, decoder)
-    model.load_state_dict(torch.load("./epoch_4.pth"))
+    #model.load_state_dict(torch.load("./epoch_4.pth"))
     model = model.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
-    for epoch in range(5, 5 + epoch + 1):
+    for epoch in range(1, epoch + 1):
         total_loss = 0.0
         model.train()
         start = time()
@@ -122,7 +122,7 @@ def train(device, epoch=10, batch_size=32):
             outputs = model(images, captions)
             loss = criterion(
                 outputs.view(-1, len(train.vocab)),
-                captions[:, 1:].contiguous().view(-1)
+                captions.contiguous().view(-1)
             )
             loss.backward()
             optimizer.step()

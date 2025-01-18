@@ -32,13 +32,12 @@ class Decoder(torch.nn.Module):
         batch_size = features.size(0)
         seq_length = captions.size(1)
         # batch x seq_length x embed_size
-        captions = captions[:, :-1]
         captions_embed = self.embed(captions)
 
         hidden = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(features.device)
         cell = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(features.device)
 
-        x = torch.zeros(batch_size, seq_length - 1, self.fc.out_features).to(features.device)
+        x = torch.zeros(batch_size, seq_length, self.fc.out_features).to(features.device)
 
         for t in range(captions.size(1)):
             if t == 0:
