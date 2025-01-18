@@ -51,6 +51,37 @@ class Decoder(torch.nn.Module):
 
         return x
 
+    def predict(self, features, start_token, end_token, vocab, device, max_len=20):
+        features = features.to(device)
+
+        batch_size = features.size(0)
+        hidden = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(device)
+        cell = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(device)
+
+        inputs = features.unsqueeze(1)
+        generated_captions = torch.zeros(batch_size, max_len).long().to(device)
+        generated_captions[:, 0] = vocab(start_token)
+
+        for t in range(1, max_len):
+            outputs, (hidden, cell) = self.lstm(inputs, (hidden, cell))
+            logits = self.fc(outputs.squeeze(1))
+            predicted = logits.argmax(dim=1)
+            generated_captions[:, t] = predicted
+
+            if (predicted == vocab(end_token)).all():
+                break
+
+            inputs = self.embed(predicted).unsqueeze(1)
+
+        indices = generated_captions.squeeze(0).tolist()
+        words = []
+        str_caption = ""
+        for index in indices:
+            words.append(vocab.idx2word[index])
+        str_caption = "".join(words)
+
+        return str_caption
+
 
 class ImageCaption(torch.nn.Module):
     def __init__(self, encoder, decoder):

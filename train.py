@@ -1,3 +1,4 @@
+from time import time
 import math
 import numpy as np
 import torch
@@ -50,28 +51,24 @@ class RandomCaptionLengthSampler(sampler.Sampler):
             self.length_to_indices[length].append(idx)
 
     def __iter__(self):
-        """
-        랜덤한 길이를 선택하고, 해당 길이의 데이터로 배치를 생성.
-        """
         lengths = list(self.length_to_indices.keys())
 
-        while True:
-            random_length = np.random.choice(lengths)  # 랜덤 길이 선택
+        # 무한 반복 대신 길이를 반복적으로 샘플링
+        for random_length in np.random.permutation(lengths):
             all_indices = self.length_to_indices[random_length]
 
-            # 충분한 샘플이 있는 경우에만 처리
-            if len(all_indices) >= self.batch_size:
-                np.random.shuffle(all_indices)  # 인덱스를 무작위로 섞기
-                for i in range(0, len(all_indices), self.batch_size):
-                    batch = all_indices[i:i + self.batch_size]
-                    if len(batch) == self.batch_size:
-                        yield batch
+            # 배치 생성
+            np.random.shuffle(all_indices)  # 인덱스를 무작위로 섞기
+            for i in range(0, len(all_indices), self.batch_size):
+                batch = all_indices[i:i + self.batch_size]
+                if len(batch) == self.batch_size:  # 배치 크기를 만족할 때만 반환
+                    yield batch
 
     def __len__(self):
         return sum(len(indices) // self.batch_size for indices in self.length_to_indices.values())
 
 
-def train(device, epoch=1):
+def train(device, epoch=10, batch_size=32):
     transform_train = transforms.Compose([
         transforms.Resize(256),
         transforms.RandomCrop(224),
@@ -88,16 +85,16 @@ def train(device, epoch=1):
     train = COCODataset(transform_train,
                        annotations_path="/Users/dsparch/Workspace/Data/COCO/annotations-2/captions_train2014.json",
                        img_dir_path="/Users/dsparch/Workspace/Data/COCO/train2014",
-                       batch_size=32)
+                        batch_size=batch_size)
 
     validation = COCODataset(transform_validation,
                              annotations_path="/Users/dsparch/Workspace/Data/COCO/annotations-2/captions_val2014.json",
-                             batch_size=32,
+                             batch_size=batch_size,
                              img_dir_path="/Users/dsparch/Workspace/Data/COCO/val2014")
 
 
     data_loader = DataLoader(dataset=train,
-                             batch_sampler=RandomCaptionLengthSampler(train, 32),
+                             batch_sampler=RandomCaptionLengthSampler(train, batch_size),
                              num_workers=4)
 
     validation_data_loader = DataLoader(dataset=validation,
@@ -107,11 +104,15 @@ def train(device, epoch=1):
     encoder = Encoder(embed_size)
     decoder = Decoder(embed_size, 512, len(train.vocab))
     model = ImageCaption(encoder, decoder)
+    model.load_state_dict(torch.load("./epoch_4.pth"))
     model = model.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
-    for epoch in range(1, epoch + 1):
+    for epoch in range(5, 5 + epoch + 1):
+        total_loss = 0.0
+        model.train()
+        start = time()
         for images, captions in data_loader:
             #show_image_with_caption(images[0], captions[0], vocab=train.vocab)
 
@@ -119,17 +120,32 @@ def train(device, epoch=1):
             captions = captions.to(device)
 
             outputs = model(images, captions)
-            print(outputs.size(), captions.size())
             loss = criterion(
                 outputs.view(-1, len(train.vocab)),
                 captions[:, 1:].contiguous().view(-1)
             )
             loss.backward()
             optimizer.step()
-            print(loss)
+            total_loss += loss.item()
+            print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
+        print(f"TRAIN Total Loss for Epoch {epoch}: {total_loss:.4f} time: {time() - start}")
+        torch.save(model.state_dict(), f"epoch_{epoch}.pth")
 
-        for images, captions in validation_data_loader:
-            pass
+        validations_loss = 0.0
+        model.eval()
+        for images, captions in tqdm(validation_data_loader):
+            images = images.to(device)
+            captions = captions.to(device)
+
+            outputs = model(images, captions)
+            loss = criterion(
+                outputs.view(-1, len(train.vocab)),
+                captions[:, 1:].contiguous().view(-1)
+            )
+
+            validations_loss += loss.item()
+            #print(f"Epoch {epoch}, Validation Loss: {loss.item():.4f}")
+        print(f"VALIDATION Epoch {epoch} Total loss {validations_loss}")
 
 
 if __name__ == "__main__":
@@ -138,4 +154,4 @@ if __name__ == "__main__":
         device = "cuda"
     elif torch.backends.mps.is_available():
         device = "mps"
-    train(device, 1)
+    train(device)
