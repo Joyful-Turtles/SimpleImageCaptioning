@@ -1,3 +1,4 @@
+import sys
 from time import time
 import math
 import numpy as np
@@ -50,15 +51,14 @@ class RandomCaptionLengthSampler(sampler.Sampler):
                 self.length_to_indices[length] = []
             self.length_to_indices[length].append(idx)
 
-    def __iter__(self):
         lengths = list(self.length_to_indices.keys())
+        self.random_lengths = np.random.permutation(lengths)
 
-        # 무한 반복 대신 길이를 반복적으로 샘플링
-        for random_length in np.random.permutation(lengths):
+    def __iter__(self):
+        for random_length in self.random_lengths:
             all_indices = self.length_to_indices[random_length]
+            np.random.shuffle(all_indices)
 
-            # 배치 생성
-            np.random.shuffle(all_indices)  # 인덱스를 무작위로 섞기
             for i in range(0, len(all_indices), self.batch_size):
                 batch = all_indices[i:i + self.batch_size]
                 if len(batch) == self.batch_size:  # 배치 크기를 만족할 때만 반환
@@ -68,7 +68,7 @@ class RandomCaptionLengthSampler(sampler.Sampler):
         return sum(len(indices) // self.batch_size for indices in self.length_to_indices.values())
 
 
-def train(device, epoch=10, batch_size=32):
+def train(device, epoch=3, batch_size=32):
     transform_train = transforms.Compose([
         transforms.Resize(256),
         transforms.RandomCrop(224),
@@ -79,8 +79,9 @@ def train(device, epoch=10, batch_size=32):
 
     transform_validation = transforms.Compose([
         transforms.Resize(224),
-        transforms.ToTensor()
-    ])
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406),
+                             (0.229, 0.224, 0.225))])
 
     train = COCODataset(transform_train,
                        annotations_path="/Users/dsparch/Workspace/Data/COCO/annotations-2/captions_train2014.json",
@@ -127,7 +128,8 @@ def train(device, epoch=10, batch_size=32):
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-            print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
+            print(f"\rEpoch {epoch}, Loss: {loss.item():.4f}", end="", flush=True)
+            sys.stdout.flush()
         print(f"TRAIN Total Loss for Epoch {epoch}: {total_loss:.4f} time: {time() - start}")
         torch.save(model.state_dict(), f"epoch_{epoch}.pth")
 
@@ -140,7 +142,7 @@ def train(device, epoch=10, batch_size=32):
             outputs = model(images, captions)
             loss = criterion(
                 outputs.view(-1, len(train.vocab)),
-                captions[:, 1:].contiguous().view(-1)
+                captions.contiguous().view(-1)
             )
 
             validations_loss += loss.item()

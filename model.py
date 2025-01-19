@@ -39,6 +39,7 @@ class Decoder(torch.nn.Module):
 
         x = torch.zeros(batch_size, seq_length, self.fc.out_features).to(features.device)
 
+        # Teacher Forcing instead Autoregressive
         for t in range(captions.size(1)):
             if t == 0:
                 inputs = features.unsqueeze(1)
@@ -50,7 +51,7 @@ class Decoder(torch.nn.Module):
 
         return x
 
-    def predict(self, features, start_token, end_token, vocab, device, max_len=20):
+    def predict(self, features, vocab, device, max_len=20):
         features = features.to(device)
 
         batch_size = features.size(0)
@@ -58,28 +59,15 @@ class Decoder(torch.nn.Module):
         cell = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(device)
 
         inputs = features.unsqueeze(1)
-        generated_captions = torch.zeros(batch_size, max_len).long().to(device)
-        generated_captions[:, 0] = vocab(start_token)
-
-        for t in range(1, max_len):
+        generated_caption = []
+        for t in range(max_len):
             outputs, (hidden, cell) = self.lstm(inputs, (hidden, cell))
-            logits = self.fc(outputs.squeeze(1))
-            predicted = logits.argmax(dim=1)
-            generated_captions[:, t] = predicted
+            outputs = self.fc(outputs.squeeze(1))
+            predicted_idx = torch.argmax(outputs, dim=1)
+            generated_caption.append(predicted_idx.item())
+            inputs = self.embed(predicted_idx).unsqueeze(1)
 
-            if (predicted == vocab(end_token)).all():
-                break
-
-            inputs = self.embed(predicted).unsqueeze(1)
-
-        indices = generated_captions.squeeze(0).tolist()
-        words = []
-        str_caption = ""
-        for index in indices:
-            words.append(vocab.idx2word[index])
-        str_caption = "".join(words)
-
-        return str_caption
+        return [vocab.idx2word[idx] for idx in generated_caption]
 
 
 class ImageCaption(torch.nn.Module):
