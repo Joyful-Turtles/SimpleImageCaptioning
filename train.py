@@ -1,17 +1,20 @@
-import sys
-from time import time
-import math
-import numpy as np
 import torch
-from torchvision import transforms
+import numpy as np
+import torchvision.transforms as transforms
+
+from time import time
 from torch.utils.data import DataLoader, sampler
-from dataset import COCODataset
-from vocabulary import Vocabulary
 from tqdm import tqdm
 from model import Encoder, Decoder, ImageCaption
-import matplotlib.pyplot as plt
-import torchvision.transforms as transforms
-from PIL import Image
+from dataset import COCODataset
+
+
+def fix_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+fix_seed(0)
 
 
 def show_image_with_caption(image_tensor, caption_tensor, vocab):
@@ -88,10 +91,10 @@ class RandomCaptionLengthSampler(sampler.Sampler):
         )
 
 
-def train(device, epoch=3, batch_size=1024):
+def train(device, epoch=10, batch_size=256):
     transform_train = transforms.Compose(
         [
-            transforms.Resize(256),
+            transforms.Resize((256, 256)),
             transforms.RandomCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -136,9 +139,9 @@ def train(device, epoch=3, batch_size=1024):
         pin_memory=True,
     )
 
-    embed_size = 256
+    embed_size = 512
     encoder = Encoder(embed_size)
-    decoder = Decoder(embed_size, 512, len(train.vocab))
+    decoder = Decoder(embed_size, 512, len(train.vocab), num_layers=1)
     model = ImageCaption(encoder, decoder)
     # model.load_state_dict(torch.load("./epoch_1.pth"))
     model = model.to(device)
@@ -160,11 +163,11 @@ def train(device, epoch=3, batch_size=1024):
 
             outputs = model(images, captions)
 
-            # Origin
+            # Origin)
             # outputs = outputs.view(-1, len(train.vocab))
             # captions = captions.contiguous().view(-1)
 
-            # New
+            # New)
             outputs = outputs
             captions = captions
             # outputs: [B, word_len, vocab_size] -> [B, vocab_size, word_len]
@@ -175,12 +178,46 @@ def train(device, epoch=3, batch_size=1024):
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-            print(f"\rEpoch {epoch}, Loss: {loss.item():.4f}")
-            # sys.stdout.flush()
+
+            word_len = captions.shape[1]
+            print(
+                f"\rEpoch {epoch}, Loss: {loss.item():.4f}, word_len: {word_len}",
+            )
+
+            # First image debug
+            outputs = outputs.permute(0, 2, 1)
+            outputs = outputs[0]
+            outputs = outputs.argmax(dim=1)
+            logits = outputs.cpu().detach().numpy()
+            print(f"logits: {logits.shape}")
+
+            predictions = ""
+            for logit in logits:
+                predictions += train.vocab.idx2word[logit] + " "
+            print(f" = RET-1 : {len(logits)} : {predictions}")
+
+            # Caption debug
+            captions_str = ""
+            for caption in captions[0]:
+                captions_str += train.vocab.idx2word[caption.item()] + " "
+            print(f" = CAPTI : {len(captions[0])} : {captions_str}")
+
+            # First image debug
+            features = model.encoder(images)
+            # [B, 256] -> [1, 256] first image
+            features = features[0].unsqueeze(0)
+            caption = model.decoder.predict(features, train.vocab, device)
+            caption_join = " ".join(caption[0])
+            print(f" = RET-2 : {len(caption[0])} : {caption_join}")
+
         print(
             f"TRAIN Total Loss for Epoch {epoch}: {total_loss:.4f} time: {time() - start}"
         )
         torch.save(model.state_dict(), f"epoch_{epoch}.pth")
+
+        if epoch % 5 != 0:
+            print(f"[INFO] skip validation for epoch {epoch}")
+            continue
 
         validations_loss = 0.0
         model.eval()
@@ -190,11 +227,11 @@ def train(device, epoch=3, batch_size=1024):
 
             outputs = model(images, captions)
 
-            # Origin
+            # Origin)
             # outputs = outputs.view(-1, len(train.vocab))
             # captions = captions.contiguous().view(-1)
 
-            # New
+            # New)
             outputs = outputs
             captions = captions
             # outputs: [B, word_len, vocab_size] -> [B, vocab_size, word_len]

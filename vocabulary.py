@@ -6,13 +6,15 @@ import nltk
 
 
 class Vocabulary:
-    def __init__(self,
-                 vocab_threshold,
-                 annotations_path,
-                 vocab_file_path="./vocab.pkl",
-                 start_word="<start>",
-                 end_word="<end>",
-                 unk_word="<unk>"):
+    def __init__(
+        self,
+        vocab_threshold,
+        annotations_path,
+        vocab_file_path="./vocab.pkl",
+        start_word="<start>",
+        end_word="<end>",
+        unk_word="<unk>",
+    ):
 
         self.vocab_threshold = vocab_threshold
         self.start_word = start_word
@@ -50,11 +52,13 @@ class Vocabulary:
         ids = list(coco.anns.keys())
 
         for _id in ids:
-            captions = coco.anns[_id]['caption']
+            captions = coco.anns[_id]["caption"]
             tokens = nltk.tokenize.word_tokenize(captions.lower())
             counter.update(tokens)
 
-        words = [word for word, count in counter.items() if count >= self.vocab_threshold]
+        words = [
+            word for word, count in counter.items() if count >= self.vocab_threshold
+        ]
         for word in words:
             self.add_word(word)
 
@@ -75,5 +79,10 @@ class Vocabulary:
 
 
 if __name__ == "__main__":
-    vocabulary = Vocabulary(5, "/Users/dsparch/Workspace/Data/COCO/annotations-2/captions_train2014.json")
+    vocabulary = Vocabulary(
+        5,
+        "/home/dkdk/data/coco2014/coco2014/annotations/annotations/captions_train2014.json",
+    )
 
+    for i in range(100):
+        print(f"{i} : {vocabulary.idx2word[i]}")

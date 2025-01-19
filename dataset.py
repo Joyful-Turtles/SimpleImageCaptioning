@@ -45,6 +45,20 @@ class COCODataset(Dataset):
 
         self.caption_lengths = [len(token) for token in all_tokens]
 
+        """
+        length_counts = {}
+        for length in self.caption_lengths:
+            if length in length_counts:
+                length_counts[length] += 1
+            else:
+                length_counts[length] = 0
+
+        # Sort by key
+        length_counts = dict(sorted(length_counts.items()))
+        for k, v in length_counts.items():
+            print(f"Length: {k}, Count: {v}")
+        """
+
     def __getitem__(self, index):
         ann_id = self.ids[index]
         caption = self.coco.anns[ann_id]["caption"]
