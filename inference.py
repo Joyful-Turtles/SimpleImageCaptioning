@@ -19,7 +19,7 @@ if __name__ == "__main__":
     decoder = Decoder(embed_size, 512, len(vocab))
 
     model = ImageCaption(encoder, decoder).to(device)
-    state = torch.load("./epoch_2.pth")
+    state = torch.load("./epoch_1.pth")
     model.load_state_dict(state)
     model.eval()
 
@@ -33,6 +33,6 @@ if __name__ == "__main__":
     image = Image.open("/home/jisu/Workspaces/Data/COCO/train2014/COCO_train2014_000000000081.jpg").convert("RGB")
     image_tensor = transform(image).unsqueeze(0)
     features = model.encoder(image_tensor.to(device))
-    caption = model.decoder.predict(features, vocab, device)
-    print(caption)
+    caption = model.decoder.predict(features)[0]
+    print([vocab.idx2word[idx] for idx in caption])
 
