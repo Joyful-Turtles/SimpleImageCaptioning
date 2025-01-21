@@ -12,6 +12,12 @@ else:
     device = "cpu"
 
 if __name__ == "__main__":
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backendsd.mps.is_available():
+        device = "mps"
+
     vocab = Vocabulary(5, None)
 
     embed_size = 256
@@ -25,17 +31,30 @@ if __name__ == "__main__":
 
     transform = transforms.Compose(
         [
-            transforms.Resize((224, 224)),
+            transforms.Resize(224),
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ]
     )
 
     image = Image.open(
-        "/home/dkdk/data/coco2014/coco2014/images/val2014/COCO_val2014_000000000074.jpg"
+        "/home/dkdk/data/coco2014/coco2014/images/train2014/COCO_train2014_000000000081.jpg"
     ).convert("RGB")
     image_tensor = transform(image).unsqueeze(0)
     features = model.encoder(image_tensor.to(device))
-    print(f"features: {features.shape}")
-    caption = model.decoder.predict(features, vocab, device)
-    print(caption)
+    caption = model.decoder.predict(features)[0]
+
+    for i in caption:
+        print(vocab.idx2word[i])
+
+    """
+    test_image = Image.open(
+        "/home/dkdk/data/coco2014/coco2014/images/train2014/COCO_train2014_000000000081.jpg"
+    ).convert("RGB")
+    test_image_tensor = transform_validation(test_image).unsqueeze(0)
+    test_features = model.encoder(test_image_tensor.to(device))
+
+    data_loader.dataset.vocab.idx2word[i]
+    for i in model.decoder.predict(test_features)[0]
+
+    """

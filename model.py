@@ -31,6 +31,8 @@ class Decoder(torch.nn.Module):
     def __init__(self, embed_size, hidden_size, vocab_size, num_layers=1):
         super(Decoder, self).__init__()
 
+        self.num_layers = num_layers
+
         self.embed = torch.nn.Embedding(vocab_size, embed_size)
         self.lstm = torch.nn.LSTM(
             embed_size, hidden_size, num_layers, batch_first=True, dropout=0.5
@@ -48,19 +50,14 @@ class Decoder(torch.nn.Module):
         # batch x seq_length x embed_size
         captions_embed = self.embed(captions)
 
-        hidden = torch.zeros(
-            self.lstm.num_layers,
-            batch_size,
-            self.lstm.hidden_size,
-        ).to(features.device)
+        hidden = torch.zeros((self.num_layers, batch_size, self.lstm.hidden_size)).to(
+            features.device
+        )
+        cell = torch.zeros((self.num_layers, batch_size, self.lstm.hidden_size)).to(
+            features.device
+        )
 
-        cell = torch.zeros(
-            self.lstm.num_layers,
-            batch_size,
-            self.lstm.hidden_size,
-        ).to(features.device)
-
-        x = torch.zeros(batch_size, seq_length, self.fc.out_features).to(
+        x = torch.zeros((batch_size, seq_length, self.fc.out_features)).to(
             features.device
         )
 
@@ -76,53 +73,29 @@ class Decoder(torch.nn.Module):
 
         return x
 
-    def predict(self, features, vocab, device, max_len=30):
-        features = features.to(device)
+    def predict(self, features, max_len=20):
+        with torch.no_grad():
+            batch_size = features.size(0)
+            hidden = torch.zeros(
+                self.lstm.num_layers, batch_size, self.lstm.hidden_size
+            ).to(features.device)
+            cell = torch.zeros(
+                self.lstm.num_layers, batch_size, self.lstm.hidden_size
+            ).to(features.device)
 
-        batch_size = features.size(0)
+            inputs = features.unsqueeze(1)
+            generated_captions = (
+                torch.zeros(batch_size, max_len).long().to(features.device)
+            )
 
-        hidden = torch.zeros(
-            self.lstm.num_layers, batch_size, self.lstm.hidden_size
-        ).to(device)
-        cell = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(
-            device
-        )
+            for t in range(0, max_len):
+                outputs, (hidden, cell) = self.lstm(inputs, (hidden, cell))
+                logits = self.fc(outputs.squeeze(1))
+                predicted = logits.argmax(dim=1)
+                inputs = self.embed(predicted).unsqueeze(1)
+                generated_captions[:, t] = predicted
 
-        inputs = features.unsqueeze(1)
-
-        generated_captions = [[] for _ in range(batch_size)]
-
-        for t in range(max_len):
-            outputs, (hidden, cell) = self.lstm(
-                inputs, (hidden, cell)
-            )  # outputs: (batch_size, 1, hidden_size)
-            outputs = self.fc(outputs.squeeze(1))  # (batch_size, vocab_size)
-            predicted_idx = torch.argmax(outputs, dim=1)  # (batch_size,)
-
-            for i in range(batch_size):
-                word_idx = predicted_idx[i].item()
-                generated_captions[i].append(word_idx)
-
-            # Prepare next inputs
-            inputs = self.embed(predicted_idx).unsqueeze(
-                1
-            )  # (batch_size, 1, embed_size)
-
-            # Check for <end> token to stop generation early
-            end_mask = predicted_idx == vocab.word2idx.get("<end>", -1)
-            if end_mask.any():
-                for i in range(batch_size):
-                    if end_mask[i] and len(generated_captions[i]) < max_len:
-                        # Pad the rest of the caption with <end> tokens if desired
-                        pass  # 또는 다른 로직을 추가할 수 있습니다.
-
-        # Convert indices to words
-        final_captions = []
-        for caption in generated_captions:
-            words = [vocab.idx2word.get(idx, "<unk>") for idx in caption]
-            final_captions.append(words)
-
-        return final_captions
+        return generated_captions.cpu().tolist()
 
 
 class ImageCaption(torch.nn.Module):
