@@ -19,7 +19,7 @@ if __name__ == "__main__":
     decoder = Decoder(embed_size, 512, len(vocab))
 
     model = ImageCaption(encoder, decoder).to(device)
-    state = torch.load("./epoch_1.pth")
+    state = torch.load("./epoch_3.pth")
     model.load_state_dict(state)
     model.eval()
 
