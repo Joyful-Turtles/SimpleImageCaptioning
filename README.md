@@ -15,10 +15,12 @@ conda env create -f environment.yml
 
 # How to
 ## train
+> You need to change hardcoded data COCO datapath
 ```sh
 python train.py
 ```
 ## inference
+> You need to chang hardcoded image path
 ```sh
 python inference.py
 ```
