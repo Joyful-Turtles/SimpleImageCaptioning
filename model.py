@@ -24,6 +24,8 @@ class Decoder(torch.nn.Module):
     def __init__(self, embed_size, hidden_size, vocab_size, num_layers=1):
         super(Decoder, self).__init__()
 
+        self.num_layers = num_layers
+
         self.embed = torch.nn.Embedding(vocab_size, embed_size)
         self.lstm = torch.nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
         self.fc = torch.nn.Linear(hidden_size, vocab_size)
@@ -34,10 +36,10 @@ class Decoder(torch.nn.Module):
         # batch x seq_length x embed_size
         captions_embed = self.embed(captions)
 
-        hidden = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(features.device)
-        cell = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(features.device)
+        hidden = torch.zeros((self.num_layers, batch_size, self.lstm.hidden_size)).to(features.device)
+        cell = torch.zeros((self.num_layers, batch_size, self.lstm.hidden_size)).to(features.device)
 
-        x = torch.zeros(batch_size, seq_length, self.fc.out_features).to(features.device)
+        x = torch.zeros((batch_size, seq_length, self.fc.out_features)).to(features.device)
 
         # Teacher Forcing instead Autoregressive
         for t in range(captions.size(1)):
@@ -51,23 +53,23 @@ class Decoder(torch.nn.Module):
 
         return x
 
-    def predict(self, features, vocab, device, max_len=20):
-        features = features.to(device)
+    def predict(self, features, max_len=20):
+        with torch.no_grad():
+            batch_size = features.size(0)
+            hidden = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(features.device)
+            cell = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(features.device)
 
-        batch_size = features.size(0)
-        hidden = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(device)
-        cell = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(device)
+            inputs = features.unsqueeze(1)
+            generated_captions = torch.zeros(batch_size, max_len).long().to(features.device)
 
-        inputs = features.unsqueeze(1)
-        generated_caption = []
-        for t in range(max_len):
-            outputs, (hidden, cell) = self.lstm(inputs, (hidden, cell))
-            outputs = self.fc(outputs.squeeze(1))
-            predicted_idx = torch.argmax(outputs, dim=1)
-            generated_caption.append(predicted_idx.item())
-            inputs = self.embed(predicted_idx).unsqueeze(1)
+            for t in range(0, max_len):
+                outputs, (hidden, cell) = self.lstm(inputs, (hidden, cell))
+                logits = self.fc(outputs.squeeze(1))
+                predicted = logits.argmax(dim=1)
+                inputs = self.embed(predicted).unsqueeze(1)
+                generated_captions[:, t] = predicted
 
-        return [vocab.idx2word[idx] for idx in generated_caption]
+        return generated_captions.cpu().tolist()
 
 
 class ImageCaption(torch.nn.Module):

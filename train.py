@@ -68,7 +68,7 @@ class RandomCaptionLengthSampler(sampler.Sampler):
         return sum(len(indices) // self.batch_size for indices in self.length_to_indices.values())
 
 
-def train(device, epoch=3, batch_size=32):
+def train(device, epoch=3, batch_size=64):
     transform_train = transforms.Compose([
         transforms.Resize(256),
         transforms.RandomCrop(224),
@@ -78,20 +78,20 @@ def train(device, epoch=3, batch_size=32):
                              (0.229, 0.224, 0.225))])
 
     transform_validation = transforms.Compose([
-        transforms.Resize(224),
+        transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406),
                              (0.229, 0.224, 0.225))])
 
     train = COCODataset(transform_train,
-                       annotations_path="/Users/dsparch/Workspace/Data/COCO/annotations-2/captions_train2014.json",
-                       img_dir_path="/Users/dsparch/Workspace/Data/COCO/train2014",
+                       annotations_path="/home/jisu/Workspaces/Data/COCO/annotations/captions_train2014.json",
+                       img_dir_path="/home/jisu/Workspaces/Data/COCO/train2014",
                         batch_size=batch_size)
 
     validation = COCODataset(transform_validation,
-                             annotations_path="/Users/dsparch/Workspace/Data/COCO/annotations-2/captions_val2014.json",
+                             annotations_path="/home/jisu/Workspaces/Data/COCO/annotations/captions_val2014.json",
                              batch_size=batch_size,
-                             img_dir_path="/Users/dsparch/Workspace/Data/COCO/val2014")
+                             img_dir_path="/home/jisu/Workspaces/Data/COCO/val2014")
 
 
     data_loader = DataLoader(dataset=train,
@@ -99,6 +99,7 @@ def train(device, epoch=3, batch_size=32):
                              num_workers=4)
 
     validation_data_loader = DataLoader(dataset=validation,
+                             batch_sampler=RandomCaptionLengthSampler(validation, batch_size),
                                         num_workers=4)
 
     embed_size = 256
@@ -108,29 +109,52 @@ def train(device, epoch=3, batch_size=32):
     #model.load_state_dict(torch.load("./epoch_4.pth"))
     model = model.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0003, weight_decay=1e-5)
+
+    test_image = Image.open("/home/jisu/Workspaces/Data/COCO/train2014/COCO_train2014_000000000081.jpg").convert("RGB")
+    test_image_tensor = transform_validation(test_image).unsqueeze(0)
 
     for epoch in range(1, epoch + 1):
         total_loss = 0.0
         model.train()
         start = time()
-        for images, captions in data_loader:
+        for i, (images, captions) in enumerate(data_loader):
             #show_image_with_caption(images[0], captions[0], vocab=train.vocab)
 
             images = images.to(device)
             captions = captions.to(device)
 
-            outputs = model(images, captions)
+            model.zero_grad()
+
+            outputs = model(images, captions[:, :-1])
+
             loss = criterion(
                 outputs.view(-1, len(train.vocab)),
-                captions.contiguous().view(-1)
+                captions[:, 1:].contiguous().view(-1)
             )
+
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-            print(f"\rEpoch {epoch}, Loss: {loss.item():.4f}", end="", flush=True)
+
+            print(f"\rEpoch {epoch}, {i}/{len(data_loader)} Loss: {loss.item():.4f}", flush=True)
             sys.stdout.flush()
-        print(f"TRAIN Total Loss for Epoch {epoch}: {total_loss:.4f} time: {time() - start}")
+
+            if i % 1000 == 0:
+                features = model.encoder(images)
+                print("\rpred", " ".join([data_loader.dataset.vocab.idx2word[i] for i in model.decoder.predict(features)[0]]), flush=True)
+                print("\rmodel", " ".join([data_loader.dataset.vocab.idx2word[i] for i in outputs[0].argmax(dim=1).cpu().tolist()]), flush=True)
+                print("\ranswer", " ".join([data_loader.dataset.vocab.idx2word[i] for i in captions[0, 1:].cpu().tolist()]), flush=True)
+                test_features = model.encoder(test_image_tensor.to(device))
+                print("\rtest", " ".join([data_loader.dataset.vocab.idx2word[i] for i in model.decoder.predict(test_features)[0]]), flush=True)
+                print()
+                print(time() - start)
+                start = time()
+
+
+            #sys.stdout.flush()
+
+        print(f"\nTRAIN Total Loss for Epoch {epoch}: {total_loss:.4f} time: {time() - start}")
         torch.save(model.state_dict(), f"epoch_{epoch}.pth")
 
         validations_loss = 0.0
@@ -139,10 +163,10 @@ def train(device, epoch=3, batch_size=32):
             images = images.to(device)
             captions = captions.to(device)
 
-            outputs = model(images, captions)
+            outputs = model(images, captions[:, :-1])
             loss = criterion(
                 outputs.view(-1, len(train.vocab)),
-                captions.contiguous().view(-1)
+                captions[:, 1:].contiguous().view(-1)
             )
 
             validations_loss += loss.item()
