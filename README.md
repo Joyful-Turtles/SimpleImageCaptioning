@@ -2,7 +2,8 @@
 ```txt
 ['a', 'large', 'jetliner', 'flying', 'through', 'a', 'cloudy', 'sky', '.', '<end>', '<end>', 'and', 'clouds', '.', '<end>', '<end>', 'and', '<unk>', '.', '<end>']
 ```
-![](./test.png)
+
+![test](./test.jpg)
 
 # Prequisite
 * anaconda
