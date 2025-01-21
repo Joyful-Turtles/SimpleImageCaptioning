@@ -27,7 +27,9 @@ class Decoder(torch.nn.Module):
         self.num_layers = num_layers
 
         self.embed = torch.nn.Embedding(vocab_size, embed_size)
-        self.lstm = torch.nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
+        self.lstm = torch.nn.LSTM(
+            embed_size, hidden_size, num_layers, batch_first=True, dropout=0.5
+        )
         self.fc = torch.nn.Linear(hidden_size, vocab_size)
 
     def forward(self, features, captions):
@@ -36,10 +38,16 @@ class Decoder(torch.nn.Module):
         # batch x seq_length x embed_size
         captions_embed = self.embed(captions)
 
-        hidden = torch.zeros((self.num_layers, batch_size, self.lstm.hidden_size)).to(features.device)
-        cell = torch.zeros((self.num_layers, batch_size, self.lstm.hidden_size)).to(features.device)
+        hidden = torch.zeros((self.num_layers, batch_size, self.lstm.hidden_size)).to(
+            features.device
+        )
+        cell = torch.zeros((self.num_layers, batch_size, self.lstm.hidden_size)).to(
+            features.device
+        )
 
-        x = torch.zeros((batch_size, seq_length, self.fc.out_features)).to(features.device)
+        x = torch.zeros((batch_size, seq_length, self.fc.out_features)).to(
+            features.device
+        )
 
         # Teacher Forcing instead Autoregressive
         for t in range(captions.size(1)):
@@ -56,11 +64,17 @@ class Decoder(torch.nn.Module):
     def predict(self, features, max_len=20):
         with torch.no_grad():
             batch_size = features.size(0)
-            hidden = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(features.device)
-            cell = torch.zeros(self.lstm.num_layers, batch_size, self.lstm.hidden_size).to(features.device)
+            hidden = torch.zeros(
+                self.lstm.num_layers, batch_size, self.lstm.hidden_size
+            ).to(features.device)
+            cell = torch.zeros(
+                self.lstm.num_layers, batch_size, self.lstm.hidden_size
+            ).to(features.device)
 
             inputs = features.unsqueeze(1)
-            generated_captions = torch.zeros(batch_size, max_len).long().to(features.device)
+            generated_captions = (
+                torch.zeros(batch_size, max_len).long().to(features.device)
+            )
 
             for t in range(0, max_len):
                 outputs, (hidden, cell) = self.lstm(inputs, (hidden, cell))
