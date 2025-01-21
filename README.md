@@ -1,3 +1,9 @@
+# What is Image Captioning
+```txt
+['a', 'large', 'jetliner', 'flying', 'through', 'a', 'cloudy', 'sky', '.', '<end>', '<end>', 'and', 'clouds', '.', '<end>', '<end>', 'and', '<unk>', '.', '<end>']
+```
+![](./test.png)
+
 # Prequisite
 * anaconda
 * COCO Datset
@@ -23,4 +29,5 @@ python train.py
 > You need to chang hardcoded image path
 ```sh
 python inference.py
+
 ```

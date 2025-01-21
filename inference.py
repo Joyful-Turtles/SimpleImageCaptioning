@@ -30,7 +30,7 @@ if __name__ == "__main__":
                              (0.229, 0.224, 0.225))
     ])
 
-    image = Image.open("/home/jisu/Workspaces/Data/COCO/train2014/COCO_train2014_000000000081.jpg").convert("RGB")
+    image = Image.open("./test.jpg").convert("RGB")
     image_tensor = transform(image).unsqueeze(0)
     features = model.encoder(image_tensor.to(device))
     caption = model.decoder.predict(features)[0]
